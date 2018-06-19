@@ -141,6 +141,9 @@ func (bpf *Module) Close() {
 		C.free(unsafe.Pointer(tpCategoryCS))
 		C.free(unsafe.Pointer(tpNameCS))
 	}
+	for k := range bpf.perfEvents {
+		bpf.detachPerfEvent(k)
+	}
 	for _, fd := range bpf.funcs {
 		syscall.Close(fd)
 	}
