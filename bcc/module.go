@@ -40,6 +40,7 @@ type Module struct {
 	kprobes     map[string]unsafe.Pointer
 	uprobes     map[string]unsafe.Pointer
 	tracepoints map[string]unsafe.Pointer
+	perfEvents  map[string][]int
 }
 
 type compileRequest struct {
@@ -93,6 +94,7 @@ func newModule(code string, cflags []string) *Module {
 		kprobes:     make(map[string]unsafe.Pointer),
 		uprobes:     make(map[string]unsafe.Pointer),
 		tracepoints: make(map[string]unsafe.Pointer),
+		perfEvents:  make(map[string][]int),
 	}
 }
 
