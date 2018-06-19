@@ -22,6 +22,8 @@ import (
 	"sync"
 	"syscall"
 	"unsafe"
+
+	"github.com/iovisor/gobpf/pkg/cpuonline"
 )
 
 /*
@@ -424,4 +426,73 @@ func (bpf *Module) AttachXDP(devName string, fd int) error {
 // RemoveXDP removes any xdp from this device.
 func (bpf *Module) RemoveXDP(devName string) error {
 	return bpf.attachXDP(devName, -1, 0)
+}
+
+func (bpf *Module) attachPerfEvent(fnName string, evType, evConfig uint32, samplePeriod, sampleFreq uint64, pid, cpu, groupFD int) (int, error) {
+	fd, err := bpf.LoadPerfEvent(fnName)
+	if err != nil {
+		return fmt.Errorf("failed to load BPF perf event %v : %v", fnName, err)
+	}
+	res, err := C.bpf_attach_perf_event(
+		C.int(fd),
+		C.uint32_t(evType),
+		C.uint32_t(evConfig),
+		C.uint64_t(samplePeriod),
+		C.uint64_t(sampleFreq),
+		C.pid_t(pid),
+		C.int(cpu),
+		C.int(groupFD),
+	)
+	if res != 0 || err != nil {
+		return -1, fmt.Errorf("failed to attach BPF perf event %v : %v", fnName, err)
+	}
+	return int(res), nil
+}
+
+func (bpf *Module) AttachPerfEvent(fnName string, evType, evConfig uint32, samplePeriod, sampleFreq uint64, pid, cpu, groupFD int) error {
+	evKey := fmt.Sprintf("%v:%v", evType, evConfig)
+	if cpu >= 0 {
+		res, err := bpf.attachPerfEvent(fnName, evType, evConfig, samplePeriod, sampleFreq, pid, cpu, groupFD)
+		if err != nil {
+			return err
+		}
+		bpf.openPerfEvents[evKey] = append(bpf.openPerfEvents[evKey], res)
+	}
+	cpus, err := cpuonline.Get()
+	if err != nil {
+		return fmt.Errorf("failed to get online CPUs to attach perf event %v : %v", fnName, err)
+	}
+	bpf.openPerfEvents[evKey] = make([]int, len(cpus))
+	for i, c := range cpus {
+		res, err = bpf.attachPerfEvent(
+			fnName,
+			evType,
+			evConfig,
+			samplePeriod,
+			sampleFreq,
+			pid,
+			cpu,
+			groupFD,
+		)
+		if err != nil {
+			return err
+		}
+		bpf.openPerfEvents[evKey][i] = res
+	}
+}
+
+func (bpf *Module) detachPerfEvent(evKey string) error {
+	fds := bpf.openPerfEvents[evKey]
+	for _, fd := range fds {
+		res, err := C.bpf_close_perf_event(C.int(fd))
+		if res != 0 || err != nil {
+			return fmt.Errorf("error closing perf event %v", err)
+		}
+	}
+	return nil
+}
+
+func (bpf *Module) DetachPerfEvent(evType, evConfig uint32) error {
+	evKey := fmt.Sprintf("%v:%v")
+	bpf.detachPerfEvent(evKey)
 }
