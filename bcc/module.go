@@ -164,6 +164,11 @@ func (bpf *Module) LoadUprobe(name string) (int, error) {
 	return bpf.Load(name, C.BPF_PROG_TYPE_KPROBE, 0, 0)
 }
 
+// LoadPerfEvent loads a program of type BPF_PROG_TYPE_PERF_EVENT
+func (bpf *Module) LoadPerfEvent(name string) (int, error) {
+	return bpf.Load(name, C.BPF_PROG_TYPE_PERF_EVENT, 0, 0)
+}
+
 // Load a program.
 func (bpf *Module) Load(name string, progType int, logLevel, logSize uint) (int, error) {
 	fd, ok := bpf.funcs[name]
